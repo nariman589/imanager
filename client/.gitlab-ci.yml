@@ -1,0 +1,64 @@
+stages:
+  - setup
+  - build
+  - clean
+
+before_script:
+  - docker -v
+
+pre-setup-job:
+  stage: setup
+  only:
+    - preprod
+  allow_failure: true
+  script:
+    - docker image tag imanager-image:previous imanager-image:old
+
+setup-job:
+  stage: setup
+  only:
+    - preprod
+  needs:
+    - pre-setup-job
+  allow_failure: true
+  script:
+    - docker image tag imanager-image:latest imanager-image:previous
+
+build-job:
+  stage: build
+  only:
+    - preprod
+  needs:
+    - setup-job
+  script:
+    - docker build -t imanager-image:latest .
+
+stop-job:
+  stage: build
+  only:
+    - preprod
+  needs:
+    - build-job
+  allow_failure: true
+  script:
+    - docker container stop imanager-container
+    - docker container rm imanager-container
+
+deploy-job:
+  stage: build
+  only:
+    - preprod
+  needs:
+    - stop-job
+  script:
+    - docker run -d --restart unless-stopped -p 8085:80 --name imanager-container imanager-image:latest
+
+clean-job:
+  stage: clean
+  only:
+    - preprod
+  allow_failure: true
+  needs:
+    - deploy-job
+  script:
+    - docker rmi imanager-image:old
